@@ -1,14 +1,11 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Left endpoint -->
-  <circle cx="72" cy="256" r="32" fill="#F97316"/>
-  <!-- Right endpoint -->
-  <circle cx="440" cy="256" r="32" fill="#F97316"/>
-  <!-- Sound waves from left -->
-  <path d="M120 200 C140 230 140 282 120 312" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
-  <path d="M148 168 C180 210 180 302 148 344" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
-  <path d="M176 136 C220 190 220 322 176 376" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
-  <!-- Sound waves from right -->
-  <path d="M392 200 C372 230 372 282 392 312" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
-  <path d="M364 168 C332 210 332 302 364 344" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
-  <path d="M336 136 C292 190 292 322 336 376" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <!-- Waves (V) — shifted left, aligned with b -->
+  <circle cx="192" cy="352" r="28" fill="#F97316"/>
+  <path d="M140 308 C166 290 218 290 244 308" stroke="#F97316" stroke-width="16" stroke-linecap="round" fill="none"/>
+  <path d="M108 264 C148 232 236 232 276 264" stroke="#F97316" stroke-width="16" stroke-linecap="round" fill="none"/>
+  <path d="M76 220 C130 176 254 176 308 220" stroke="#F97316" stroke-width="16" stroke-linecap="round" fill="none"/>
+
+  <!-- b — taller stem, bump aligned to bottom of waves, same weight -->
+  <line x1="348" y1="140" x2="348" y2="392" stroke="#EA580C" stroke-width="16" stroke-linecap="round"/>
+  <path d="M348 264 C420 264 420 392 348 392" stroke="#EA580C" stroke-width="16" stroke-linecap="round" fill="none"/>
 </svg>
