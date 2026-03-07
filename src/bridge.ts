@@ -21,6 +21,17 @@ export class VoiceBridge {
     this.callbacks = callbacks;
   }
 
+  private log(session: CallSession, event: string, data?: Record<string, unknown>): void {
+    const info: Record<string, unknown> = {
+      call: session.callSid,
+      stream: session.streamSid,
+      event,
+      elapsed: Math.round((Date.now() - session.startTime.getTime()) / 1000),
+      ...data,
+    };
+    console.log(`[voice-bridge]`, JSON.stringify(info));
+  }
+
   async startSession(
     twilioWs: WebSocket,
     streamSid: string,
@@ -46,7 +57,7 @@ export class VoiceBridge {
     try {
       await this.connectGemini(session);
     } catch (error) {
-      console.error(`[voice-bridge] Error connecting to Gemini:`, error);
+      this.log(session, "gemini_connect_error", { error: String(error) });
       this.endSession(streamSid);
     }
   }
@@ -84,9 +95,12 @@ export class VoiceBridge {
         }],
       },
       callbacks: {
-        onopen: () => {},
+        onopen: () => {
+          this.log(session, "gemini_connected");
+        },
         onmessage: (message: any) => {
           if (message.setupComplete) {
+            this.log(session, "gemini_setup_complete");
             this.startHeartbeat(session);
             if (agent.greeting) {
               setTimeout(() => this.sendGreeting(session), 500);
@@ -101,9 +115,16 @@ export class VoiceBridge {
           this.forwardAudioToTwilio(session, message);
         },
         onerror: (error: any) => {
-          console.error(`[voice-bridge] Session error:`, error);
+          this.log(session, "gemini_error", { error: String(error) });
         },
-        onclose: () => {
+        onclose: (event: any) => {
+          this.log(session, "gemini_closed", {
+            code: event?.code,
+            reason: event?.reason,
+            wasClean: event?.wasClean,
+            isDraining: session.isDraining,
+            isClosing: session.isClosing,
+          });
           if (!session.isClosing) this.endSession(session.streamSid);
         },
       },
@@ -138,11 +159,16 @@ export class VoiceBridge {
 
   private handleToolCall(session: CallSession, toolCall: any): void {
     for (const fc of toolCall.functionCalls || []) {
+      this.log(session, "tool_call", { name: fc.name, args: fc.args });
+
       if (fc.name === "end_call") {
-        if (session.isDraining) return; // already draining, ignore duplicate
+        if (session.isDraining) {
+          this.log(session, "end_call_duplicate_ignored");
+          return;
+        }
         session.isDraining = true;
 
-        console.log(`[voice-bridge] end_call → draining`);
+        this.log(session, "end_call_draining");
 
         // 1. SORDA: stop heartbeat + stop forwarding audio to Gemini
         //    (prevents Gemini 1008 race condition on sendRealtimeInput during tool call)
@@ -169,19 +195,22 @@ export class VoiceBridge {
         session.geminiSession.sendRealtimeInput({
           audio: { data: SILENT_CHUNK_B64, mimeType: "audio/pcm;rate=16000" },
         });
-      } catch {}
+      } catch (error) {
+        this.log(session, "heartbeat_error", { error: String(error) });
+      }
     }, HEARTBEAT_INTERVAL);
   }
 
   private sendGreeting(session: CallSession): void {
     if (!session.geminiSession || !session.agent.greeting) return;
     try {
+      this.log(session, "greeting_sent");
       session.geminiSession.sendClientContent({
         turns: session.agent.greeting,
         turnComplete: true,
       });
     } catch (error) {
-      console.error(`[voice-bridge] Greeting error:`, error);
+      this.log(session, "greeting_error", { error: String(error) });
     }
   }
 
@@ -193,7 +222,9 @@ export class VoiceBridge {
       session.geminiSession.sendRealtimeInput({
         audio: { data: mulawToPcm16k(base64Mulaw), mimeType: "audio/pcm;rate=16000" },
       });
-    } catch {}
+    } catch (error) {
+      this.log(session, "twilio_audio_forward_error", { error: String(error) });
+    }
   }
 
   private forwardAudioToTwilio(session: CallSession, message: any): void {
@@ -222,7 +253,9 @@ export class VoiceBridge {
         streamSid: session.streamSid,
         media: { payload: pcm24kToMulaw(pcm24kBase64) },
       }));
-    } catch {}
+    } catch (error) {
+      this.log(session, "twilio_send_error", { error: String(error) });
+    }
   }
 
   async endSession(streamSid: string): Promise<void> {
@@ -231,11 +264,18 @@ export class VoiceBridge {
     session.isClosing = true;
 
     const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
+    this.log(session, "session_ending", {
+      duration,
+      isDraining: session.isDraining,
+      twilioWsState: session.twilioWs.readyState,
+    });
     this.callbacks.onSessionEnd?.(streamSid, duration);
 
     if (session.heartbeatTimer) clearInterval(session.heartbeatTimer);
     if (session.geminiSession) {
-      try { session.geminiSession.close(); } catch {}
+      try { session.geminiSession.close(); } catch (error) {
+        this.log(session, "gemini_close_error", { error: String(error) });
+      }
     }
     this.sessions.delete(streamSid);
   }

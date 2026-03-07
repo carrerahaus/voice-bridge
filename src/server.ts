@@ -32,6 +32,7 @@ const wss = new WebSocketServer({ server, path: "/stream" });
 
 wss.on("connection", (ws: WebSocket) => {
   let currentStreamSid: string | null = null;
+  let currentCallSid: string | null = null;
 
   ws.on("message", async (data: Buffer) => {
     try {
@@ -39,11 +40,13 @@ wss.on("connection", (ws: WebSocket) => {
 
       switch (message.event) {
         case "connected":
+          console.log(`[ws] Twilio connected`);
           break;
 
         case "start": {
           const { streamSid, callSid, customParameters } = message.start;
           currentStreamSid = streamSid;
+          currentCallSid = callSid;
 
           const agent: AgentConfig = {
             model: customParameters?.model,
@@ -55,7 +58,7 @@ wss.on("connection", (ws: WebSocket) => {
               : 0,
           };
 
-          console.log(`📞 Call started — stream=${streamSid}`);
+          console.log(`[ws] Stream start — call=${callSid} stream=${streamSid} voice=${agent.voice} prompt=${agent.systemPrompt.slice(0, 80)}...`);
           await bridge.startSession(ws, streamSid, callSid, agent);
           break;
         }
@@ -68,21 +71,28 @@ wss.on("connection", (ws: WebSocket) => {
         }
 
         case "stop":
+          console.log(`[ws] Stream stop — call=${currentCallSid} stream=${message.streamSid}`);
           if (message.streamSid) {
             await bridge.endSession(message.streamSid);
           }
           currentStreamSid = null;
+          currentCallSid = null;
           break;
       }
     } catch (error) {
-      console.error("[voice-bridge] Message error:", error);
+      console.error(`[ws] Message error (call=${currentCallSid}):`, error);
     }
   });
 
-  ws.on("close", async () => {
+  ws.on("close", async (code, reason) => {
+    console.log(`[ws] Twilio WS closed — call=${currentCallSid} code=${code} reason=${reason?.toString()}`);
     if (currentStreamSid) {
       await bridge.endSession(currentStreamSid);
     }
+  });
+
+  ws.on("error", (error) => {
+    console.error(`[ws] Twilio WS error — call=${currentCallSid}:`, error);
   });
 });
 
