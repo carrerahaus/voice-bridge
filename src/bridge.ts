@@ -170,19 +170,20 @@ export class VoiceBridge {
 
         this.log(session, "end_call_draining");
 
-        // 1. SORDA: stop heartbeat + stop forwarding audio to Gemini
-        //    (prevents Gemini 1008 race condition on sendRealtimeInput during tool call)
+        // SORDA: stop heartbeat + stop forwarding audio to Gemini
+        // (prevents Gemini 1008 race condition on sendRealtimeInput during tool call)
         if (session.heartbeatTimer) {
           clearInterval(session.heartbeatTimer);
           session.heartbeatTimer = null;
         }
         // handleTwilioAudio checks isDraining — no more audio sent to Gemini
 
-        // 2. MUDA: stop forwarding Gemini audio to Twilio
-        //    forwardAudioToTwilio checks isDraining — no new audio to caller
+        // NOTE: we do NOT mute Gemini→Twilio audio here.
+        // Gemini often calls end_call in the same turn as the goodbye audio.
+        // We keep forwarding so the caller hears the full "¡Chau chau!" before hang-up.
 
-        // 3. DRAIN: let already-buffered Twilio audio finish playing, then hang up
-        setTimeout(() => this.endSession(session.streamSid), 2000);
+        // DRAIN: wait for goodbye audio to finish playing, then hang up
+        setTimeout(() => this.endSession(session.streamSid), 4000);
       }
     }
   }
@@ -228,7 +229,7 @@ export class VoiceBridge {
   }
 
   private forwardAudioToTwilio(session: CallSession, message: any): void {
-    if (session.isDraining) return; // MUDA: no new audio to caller after end_call
+    // Keep forwarding audio during drain — goodbye audio must reach the caller
     if (!message.serverContent?.modelTurn?.parts) return;
     for (const part of message.serverContent.modelTurn.parts) {
       if (part.inlineData?.mimeType?.startsWith("audio/")) {
