@@ -138,12 +138,8 @@ export class VoiceBridge {
   private handleToolCall(session: CallSession, toolCall: any): void {
     for (const fc of toolCall.functionCalls || []) {
       if (fc.name === "end_call") {
-        console.log(`[voice-bridge] end_call requested — hanging up in 2s`);
-        // Send tool response so Gemini doesn't wait
-        session.geminiSession?.sendToolResponse({
-          functionResponses: [{ id: fc.id, response: { result: "ok" } }],
-        });
-        // Wait for goodbye audio to finish playing through Twilio
+        console.log(`[voice-bridge] end_call → hanging up in 2s`);
+        // Wait for goodbye audio to finish playing through Twilio, then hang up
         setTimeout(() => this.endSession(session.streamSid), 2000);
       }
     }
