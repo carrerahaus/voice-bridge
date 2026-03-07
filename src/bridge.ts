@@ -277,6 +277,11 @@ export class VoiceBridge {
         this.log(session, "gemini_close_error", { error: String(error) });
       }
     }
+    // Close Twilio WebSocket to actually hang up the call
+    if (session.twilioWs.readyState === WebSocket.OPEN) {
+      this.log(session, "twilio_ws_closing");
+      session.twilioWs.close();
+    }
     this.sessions.delete(streamSid);
   }
 
