@@ -75,6 +75,12 @@ export class VoiceBridge {
             prefixPaddingMs: 20,
           },
         },
+        tools: [{
+          functionDeclarations: [{
+            name: "end_call",
+            description: "End the phone call. Call this AFTER you have already said your goodbye.",
+          }],
+        }],
       },
       callbacks: {
         onopen: () => {},
@@ -84,6 +90,9 @@ export class VoiceBridge {
             if (agent.greeting) {
               setTimeout(() => this.sendGreeting(session), 500);
             }
+          }
+          if (message.toolCall) {
+            this.handleToolCall(session, message.toolCall);
           }
           if (message.serverContent) {
             this.handleServerContent(session, message.serverContent);
@@ -122,6 +131,20 @@ export class VoiceBridge {
       if (sc.interrupted) {
         this.clearTwilioAudio(session);
         this.callbacks.onInterruption?.(session.streamSid);
+      }
+    }
+  }
+
+  private handleToolCall(session: CallSession, toolCall: any): void {
+    for (const fc of toolCall.functionCalls || []) {
+      if (fc.name === "end_call") {
+        console.log(`[voice-bridge] end_call requested — hanging up in 2s`);
+        // Send tool response so Gemini doesn't wait
+        session.geminiSession?.sendToolResponse({
+          functionResponses: [{ id: fc.id, response: { result: "ok" } }],
+        });
+        // Wait for goodbye audio to finish playing through Twilio
+        setTimeout(() => this.endSession(session.streamSid), 2000);
       }
     }
   }
