@@ -1,7 +1,14 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Two endpoints connected by an audio waveform -->
-  <circle cx="72" cy="256" r="32" fill="#EA580C"/>
-  <circle cx="440" cy="256" r="32" fill="#FED7AA"/>
-  <path d="M104 256 Q160 100 216 256 Q272 412 328 256 Q384 100 440 256"
-        stroke="#F97316" stroke-width="24" stroke-linecap="round" fill="none"/>
+  <!-- Left endpoint -->
+  <circle cx="72" cy="256" r="32" fill="#F97316"/>
+  <!-- Right endpoint -->
+  <circle cx="440" cy="256" r="32" fill="#F97316"/>
+  <!-- Sound waves from left -->
+  <path d="M120 200 C140 230 140 282 120 312" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <path d="M148 168 C180 210 180 302 148 344" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <path d="M176 136 C220 190 220 322 176 376" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <!-- Sound waves from right -->
+  <path d="M392 200 C372 230 372 282 392 312" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <path d="M364 168 C332 210 332 302 364 344" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <path d="M336 136 C292 190 292 322 336 376" stroke="#F97316" stroke-width="14" stroke-linecap="round" fill="none"/>
 </svg>
