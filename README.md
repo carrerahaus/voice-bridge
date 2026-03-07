@@ -96,6 +96,12 @@ Dockerfile    — Multi-stage build for Cloud Run
 - **VAD tuning**: `startOfSpeechSensitivity: HIGH` + `endOfSpeechSensitivity: LOW` + `silenceDurationMs: 300` gives responsive interruptions without cutting off the caller mid-sentence.
 - **Twilio `clear` event**: When Gemini detects an interruption, we immediately tell Twilio to flush its audio buffer so the caller doesn't hear stale audio.
 
+## Contact
+
+Questions, suggestions, or want to collaborate? Reach out at **hola@carrera.haus**
+
+Built by [Carrera Haus](https://carrera.haus) — software company based in Lima, Peru.
+
 ## License
 
 MIT
