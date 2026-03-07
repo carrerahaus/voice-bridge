@@ -1,29 +1,36 @@
-# voice-bridge
+<p align="center">
+  <img src="logo.svg" width="120" alt="voice-bridge" />
+</p>
 
-Twilio Media Streams ↔ Gemini Live API bridge. Handles codec conversion, VAD, interruptions, heartbeat, and transcriptions.
+<h1 align="center">voice-bridge</h1>
+
+<p align="center">
+  Twilio ↔ Gemini Live API bridge in TypeScript.<br/>
+  Codec conversion, VAD, interruptions, heartbeat, transcriptions — all handled.
+</p>
+
+<p align="center">
+  <a href="#architecture">Architecture</a> · <a href="#quickstart">Quickstart</a> · <a href="#deploy">Deploy</a> · <a href="#twiml-integration">TwiML</a> · <a href="#design-decisions">Design</a>
+</p>
+
+---
 
 ## Architecture
 
 ```
-Twilio (mulaw 8kHz) → WebSocket → voice-bridge → Gemini Live API (PCM 16kHz/24kHz)
+Phone call → Twilio (mulaw 8kHz) → WebSocket → voice-bridge → Gemini Live API (PCM 16k/24k)
 ```
 
-Your application server builds TwiML that connects a phone call to this bridge via `<Stream>`. The bridge opens a Gemini Live session and forwards audio bidirectionally, converting between G.711 mu-law (telephony) and PCM (Gemini).
+Your app server builds TwiML that connects a call to this bridge via `<Stream>`. The bridge opens a Gemini Live session and forwards audio both ways, converting between G.711 mu-law (telephony) and PCM (Gemini).
 
-## How it works
-
-1. Twilio sends a `start` event with custom parameters (`systemPrompt`, `voice`, `greeting`, etc.)
-2. Bridge opens a Gemini Live session with those parameters
-3. Inbound audio: mulaw 8kHz → PCM 16kHz → Gemini
-4. Outbound audio: PCM 24kHz → mulaw 8kHz → Twilio
-5. Heartbeat sends silent audio every 5s to keep the Gemini session alive
-6. On interruption, sends `clear` to Twilio to stop buffered playback
-
-## Setup
+## Quickstart
 
 ```bash
+git clone https://github.com/carrerahaus/voice-bridge.git
+cd voice-bridge
 npm install
 cp .env.example .env  # add your GEMINI_API_KEY
+npm run dev
 ```
 
 ## Environment variables
@@ -33,13 +40,11 @@ cp .env.example .env  # add your GEMINI_API_KEY
 | `GEMINI_API_KEY` | Yes | Google AI API key with Gemini Live access |
 | `PORT` | No | Server port (default: 8080) |
 
-## Run locally
+## Deploy
 
-```bash
-npm run dev
-```
+### Cloud Run (recommended)
 
-## Deploy to Cloud Run
+Same Google network as Gemini — lowest latency.
 
 ```bash
 gcloud run deploy voice-bridge \
@@ -51,15 +56,22 @@ gcloud run deploy voice-bridge \
   --session-affinity
 ```
 
+### Docker
+
+```bash
+docker build -t voice-bridge .
+docker run -p 8080:8080 -e GEMINI_API_KEY=your-key voice-bridge
+```
+
 ## TwiML integration
 
-Your application server generates TwiML that points to this bridge:
+Your app server generates TwiML pointing to this bridge:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="wss://your-voice-bridge-url.run.app/stream">
+    <Stream url="wss://your-voice-bridge.run.app/stream">
       <Parameter name="systemPrompt" value="You are a helpful assistant."/>
       <Parameter name="voice" value="Aoede"/>
       <Parameter name="greeting" value="Say hello to the caller."/>
@@ -68,39 +80,65 @@ Your application server generates TwiML that points to this bridge:
 </Response>
 ```
 
-### Custom parameters
+### Parameters
 
 | Parameter | Default | Description |
 |---|---|---|
-| `systemPrompt` | "You are a helpful voice assistant." | System instruction for Gemini |
-| `voice` | "Aoede" | Gemini voice name (Aoede, Puck, Kore, etc.) |
-| `greeting` | — | Initial message to trigger the agent's first utterance |
-| `model` | "gemini-2.5-flash-native-audio-latest" | Gemini model ID |
-| `thinkingBudget` | "0" | Thinking budget (0 = disabled for low latency) |
+| `systemPrompt` | `"You are a helpful voice assistant."` | System instruction for Gemini |
+| `voice` | `"Aoede"` | Voice name — Aoede, Puck, Kore, Charon, etc. |
+| `greeting` | — | Text prompt to trigger the agent's first utterance |
+| `model` | `"gemini-2.5-flash-native-audio-latest"` | Gemini model ID |
+| `thinkingBudget` | `"0"` | Thinking budget (0 = disabled for lowest latency) |
+
+## How it works
+
+1. Twilio sends `start` event with custom parameters
+2. Bridge opens a Gemini Live session with that config
+3. Inbound: mulaw 8kHz → PCM 16kHz → Gemini
+4. Outbound: PCM 24kHz → mulaw 8kHz → Twilio
+5. Heartbeat sends 10ms of silence every 5s to keep the session alive
+6. On interruption, sends `clear` to Twilio to flush buffered audio
 
 ## Project structure
 
 ```
 src/
-  server.ts   — Express + WebSocket server
-  bridge.ts   — VoiceBridge class (Gemini session management)
-  codec.ts    — G.711 mu-law ↔ PCM conversion + resampling
-  types.ts    — TypeScript interfaces
-Dockerfile    — Multi-stage build for Cloud Run
+  server.ts   Express + WebSocket server
+  bridge.ts   VoiceBridge class — Gemini session lifecycle
+  codec.ts    G.711 mu-law ↔ PCM conversion + resampling
+  types.ts    TypeScript interfaces
+Dockerfile    Multi-stage build for Cloud Run
 ```
 
-## Key design decisions
+## Design decisions
 
-- **Heartbeat**: Gemini Live sessions go dormant without periodic audio input. A 10ms silent chunk every 5s keeps them alive.
-- **thinkingBudget: 0**: Gemini 2.5 Flash has thinking enabled by default. Disabling it drops latency from ~5s to ~1s.
-- **VAD tuning**: `startOfSpeechSensitivity: HIGH` + `endOfSpeechSensitivity: LOW` + `silenceDurationMs: 300` gives responsive interruptions without cutting off the caller mid-sentence.
-- **Twilio `clear` event**: When Gemini detects an interruption, we immediately tell Twilio to flush its audio buffer so the caller doesn't hear stale audio.
+**Heartbeat** — Gemini Live sessions go dormant without periodic audio. A 10ms silent chunk at 16kHz every 5 seconds keeps them alive. Discovered from [Google's official sample](https://github.com/GoogleCloudPlatform/generative-ai/tree/main/gemini/sample-apps/gemini-live-telephony-app).
+
+**Thinking disabled** — Gemini 2.5 Flash has thinking enabled by default. Setting `thinkingBudget: 0` drops response latency from ~5s to under 1s.
+
+**VAD tuning** — `startOfSpeechSensitivity: HIGH` catches interruptions fast. `endOfSpeechSensitivity: LOW` with `silenceDurationMs: 300` avoids cutting off mid-sentence.
+
+**Twilio `clear`** — When Gemini detects an interruption, we tell Twilio to flush its audio buffer immediately. Without this, the caller hears ~8s of stale audio before the interruption takes effect.
+
+**Zero dependencies for codec** — G.711 mu-law is a [1972 ITU-T standard](https://en.wikipedia.org/wiki/G.711). The encode/decode table and resampling are implemented in ~60 lines. No native modules, no `python-samplerate`, no `alawmulaw`.
+
+## Latency
+
+Measured end-to-end (user stops speaking → first audio response from agent):
+
+| Setup | Latency |
+|---|---|
+| Thinking ON, Railway | ~5.4s |
+| Thinking OFF, Railway | ~1.7s |
+| Thinking OFF, Cloud Run | ~876ms |
+
+Cloud Run in `us-central1` benefits from being on the same Google network as Gemini.
 
 ## Contact
 
-Questions, suggestions, or want to collaborate? Reach out at **hola@carrera.haus**
+Questions or suggestions? **hola@carrera.haus**
 
-Built by [Carrera Haus](https://carrera.haus) — software company based in Lima, Peru.
+Built by [Carrera Haus](https://carrera.haus) — Lima, Peru.
 
 ## License
 
