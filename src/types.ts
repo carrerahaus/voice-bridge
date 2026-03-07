@@ -22,6 +22,7 @@ export interface CallSession {
   agent: AgentConfig;
   startTime: Date;
   isClosing: boolean;
+  isDraining: boolean;
   isSpeaking: boolean;
   heartbeatTimer: ReturnType<typeof setInterval> | null;
   lastInputAt: number;

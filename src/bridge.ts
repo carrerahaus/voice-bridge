@@ -35,6 +35,7 @@ export class VoiceBridge {
       agent,
       startTime: new Date(),
       isClosing: false,
+      isDraining: false,
       isSpeaking: false,
       heartbeatTimer: null,
       lastInputAt: 0,
@@ -138,8 +139,23 @@ export class VoiceBridge {
   private handleToolCall(session: CallSession, toolCall: any): void {
     for (const fc of toolCall.functionCalls || []) {
       if (fc.name === "end_call") {
-        console.log(`[voice-bridge] end_call → hanging up in 2s`);
-        // Wait for goodbye audio to finish playing through Twilio, then hang up
+        if (session.isDraining) return; // already draining, ignore duplicate
+        session.isDraining = true;
+
+        console.log(`[voice-bridge] end_call → draining`);
+
+        // 1. SORDA: stop heartbeat + stop forwarding audio to Gemini
+        //    (prevents Gemini 1008 race condition on sendRealtimeInput during tool call)
+        if (session.heartbeatTimer) {
+          clearInterval(session.heartbeatTimer);
+          session.heartbeatTimer = null;
+        }
+        // handleTwilioAudio checks isDraining — no more audio sent to Gemini
+
+        // 2. MUDA: stop forwarding Gemini audio to Twilio
+        //    forwardAudioToTwilio checks isDraining — no new audio to caller
+
+        // 3. DRAIN: let already-buffered Twilio audio finish playing, then hang up
         setTimeout(() => this.endSession(session.streamSid), 2000);
       }
     }
@@ -148,7 +164,7 @@ export class VoiceBridge {
   private startHeartbeat(session: CallSession): void {
     if (session.heartbeatTimer) return;
     session.heartbeatTimer = setInterval(() => {
-      if (!session.geminiSession || session.isClosing) return;
+      if (!session.geminiSession || session.isClosing || session.isDraining) return;
       try {
         session.geminiSession.sendRealtimeInput({
           audio: { data: SILENT_CHUNK_B64, mimeType: "audio/pcm;rate=16000" },
@@ -171,7 +187,7 @@ export class VoiceBridge {
 
   handleTwilioAudio(streamSid: string, base64Mulaw: string): void {
     const session = this.sessions.get(streamSid);
-    if (!session?.geminiSession) return;
+    if (!session?.geminiSession || session.isDraining) return; // SORDA: ignore audio after end_call
 
     try {
       session.geminiSession.sendRealtimeInput({
@@ -181,6 +197,7 @@ export class VoiceBridge {
   }
 
   private forwardAudioToTwilio(session: CallSession, message: any): void {
+    if (session.isDraining) return; // MUDA: no new audio to caller after end_call
     if (!message.serverContent?.modelTurn?.parts) return;
     for (const part of message.serverContent.modelTurn.parts) {
       if (part.inlineData?.mimeType?.startsWith("audio/")) {
