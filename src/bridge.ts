@@ -50,6 +50,7 @@ export class VoiceBridge {
       isSpeaking: false,
       heartbeatTimer: null,
       lastInputAt: 0,
+      transcript: [],
     };
 
     this.sessions.set(streamSid, session);
@@ -134,9 +135,11 @@ export class VoiceBridge {
   private handleServerContent(session: CallSession, sc: any): void {
     if (sc.inputTranscription?.text) {
       session.lastInputAt = Date.now();
+      session.transcript.push({ role: "user", text: sc.inputTranscription.text });
       this.callbacks.onInputTranscription?.(session.streamSid, sc.inputTranscription.text);
     }
     if (sc.outputTranscription?.text) {
+      session.transcript.push({ role: "agent", text: sc.outputTranscription.text });
       this.callbacks.onOutputTranscription?.(session.streamSid, sc.outputTranscription.text);
     }
     if (sc.modelTurn?.parts) {
@@ -271,6 +274,23 @@ export class VoiceBridge {
       twilioWsState: session.twilioWs.readyState,
     });
     this.callbacks.onSessionEnd?.(streamSid, duration);
+
+    // Fire-and-forget callback with transcript
+    if (session.agent.callbackUrl && session.transcript.length > 0) {
+      this.log(session, "callback_posting", { url: session.agent.callbackUrl, entries: session.transcript.length });
+      fetch(session.agent.callbackUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          streamSid: session.streamSid,
+          callSid: session.callSid,
+          duration,
+          transcript: session.transcript,
+        }),
+      }).catch(err => {
+        this.log(session, "callback_error", { error: String(err) });
+      });
+    }
 
     if (session.heartbeatTimer) clearInterval(session.heartbeatTimer);
     if (session.geminiSession) {

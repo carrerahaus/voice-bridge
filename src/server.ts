@@ -56,6 +56,7 @@ wss.on("connection", (ws: WebSocket) => {
             thinkingBudget: customParameters?.thinkingBudget
               ? parseInt(customParameters.thinkingBudget)
               : 0,
+            callbackUrl: customParameters?.callbackUrl,
           };
 
           console.log(`[ws] Stream start — call=${callSid} stream=${streamSid} voice=${agent.voice} prompt=${agent.systemPrompt.slice(0, 80)}...`);

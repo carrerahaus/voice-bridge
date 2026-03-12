@@ -12,6 +12,13 @@ export interface AgentConfig {
   greeting?: string;
   /** Thinking budget (0 = disabled for low latency) */
   thinkingBudget?: number;
+  /** URL to POST transcript when call ends (fire-and-forget) */
+  callbackUrl?: string;
+}
+
+export interface TranscriptEntry {
+  role: "user" | "agent";
+  text: string;
 }
 
 export interface CallSession {
@@ -26,6 +33,7 @@ export interface CallSession {
   isSpeaking: boolean;
   heartbeatTimer: ReturnType<typeof setInterval> | null;
   lastInputAt: number;
+  transcript: TranscriptEntry[];
 }
 
 export interface BridgeCallbacks {
