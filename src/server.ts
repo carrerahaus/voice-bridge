@@ -48,16 +48,39 @@ wss.on("connection", (ws: WebSocket) => {
           currentStreamSid = streamSid;
           currentCallSid = callSid;
 
-          const agent: AgentConfig = {
-            model: customParameters?.model,
-            systemPrompt: customParameters?.systemPrompt || "You are a helpful voice assistant.",
-            voice: customParameters?.voice,
-            greeting: customParameters?.greeting,
-            thinkingBudget: customParameters?.thinkingBudget
-              ? parseInt(customParameters.thinkingBudget)
-              : 0,
-            callbackUrl: customParameters?.callbackUrl,
-          };
+          let agent: AgentConfig;
+
+          if (customParameters?.configUrl) {
+            // Fetch config from URL (prompt too large for TwiML)
+            console.log(`[ws] Fetching config from ${customParameters.configUrl}`);
+            const resp = await fetch(customParameters.configUrl);
+            if (!resp.ok) {
+              console.error(`[ws] Config fetch failed: ${resp.status}`);
+              ws.close();
+              break;
+            }
+            const config = await resp.json() as Record<string, string>;
+            agent = {
+              model: config.model,
+              systemPrompt: config.systemPrompt || "You are a helpful voice assistant.",
+              voice: config.voice,
+              greeting: config.greeting,
+              thinkingBudget: config.thinkingBudget ? parseInt(config.thinkingBudget) : 0,
+              callbackUrl: config.callbackUrl,
+            };
+          } else {
+            // Inline config from TwiML parameters (backward compatible)
+            agent = {
+              model: customParameters?.model,
+              systemPrompt: customParameters?.systemPrompt || "You are a helpful voice assistant.",
+              voice: customParameters?.voice,
+              greeting: customParameters?.greeting,
+              thinkingBudget: customParameters?.thinkingBudget
+                ? parseInt(customParameters.thinkingBudget)
+                : 0,
+              callbackUrl: customParameters?.callbackUrl,
+            };
+          }
 
           console.log(`[ws] Stream start — call=${callSid} stream=${streamSid} voice=${agent.voice} prompt=${agent.systemPrompt.slice(0, 80)}...`);
           await bridge.startSession(ws, streamSid, callSid, agent);
